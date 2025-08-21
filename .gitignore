@@ -1,0 +1,6 @@
+data/
+models/
+__pycache__/
+**/__pycache__/
+src/image_search.egg-info
+output/
