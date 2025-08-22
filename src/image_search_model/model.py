@@ -4,6 +4,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import os
+from torch.utils.tensorboard import SummaryWriter
 
 
 class ImageSearchModel:
@@ -15,8 +16,8 @@ class ImageSearchModel:
         num_workers (int): 数据加载器的工作进程数
         device (torch.device): 运行设备（CPU/GPU）
     """
-    
-    def __init__(self, model_dir: str, batch_size: int, num_workers: int) -> None:
+
+    def __init__(self, summary_dir: str, model_dir: str, batch_size: int, num_workers: int) -> None:
         """初始化图像搜索模型。
 
         Args:
@@ -24,16 +25,12 @@ class ImageSearchModel:
             batch_size: 批处理大小
             num_workers: 数据加载器的工作进程数
         """
+        self.summary_dir = summary_dir
         self.model_dir = model_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
-
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-        else:
-            original = torch.load(os.path.join())
 
         self.patience = 10
         self.weight_decay = 1e-4
@@ -54,6 +51,17 @@ class ImageSearchModel:
             factor=0.1,
             patience=self.patience // 2
         )
+
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+        else:
+            names = os.listdir(model_dir)
+            if len(names) > 0:
+                model_pth = names[0]
+                original = torch.load(os.path.join(model_dir, model_pth))
+                missed_keys, unexpected_keys = self.net.load_state_dict(
+                    original['model_state_dict'], strict=False)
+                self.opt.load_state_dict(original['optimizer_state_dict'])
 
     def training(
         self,
@@ -87,12 +95,14 @@ class ImageSearchModel:
             transform=test_transform
         )
 
+        writer = SummaryWriter(self.summary_dir)
+
         best_loss = float('inf')
         patience = 0
 
         for epoch in range(total_epoch):
             self.net.train()
-            train_losses = []
+            train_loss = 0.0
             for batch_data, batch_target in trainset.loader:
                 batch_data, batch_target = batch_data.to(
                     self.device), batch_target.to(self.device)
@@ -104,7 +114,11 @@ class ImageSearchModel:
                 loss.backward()
                 self.opt.step()
 
-                train_losses.append(loss.item())
+                train_loss += loss.item()
+
+            train_loss = train_loss / len(trainset.loader)
+            writer.add_scalar('test loss', train_loss , epoch)
+            print(f'{epoch + 1}/{total_epoch}: test_loss = {train_loss:.4f}')
 
             self.net.eval()
             total_loss = 0.0
@@ -119,6 +133,7 @@ class ImageSearchModel:
                     total_loss += loss.item()
                 test_loss = total_loss / len(testset.loader)
 
+            writer.add_scalar('test loss', test_loss, epoch)
             print(f'{epoch + 1}/{total_epoch}: test_loss = {test_loss:.4f}')
 
             # 更新学习率

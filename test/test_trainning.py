@@ -9,7 +9,8 @@ def t2():
     from image_search_model.model import ImageSearchModel
 
     model = ImageSearchModel(
-        model_dir='./output/t2',
+        summary_dir='./output/t2/summary',
+        model_dir='./output/t2/model',
         batch_size=64,
         num_workers=0,
     )
